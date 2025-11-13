@@ -3,7 +3,7 @@
 识别特定类型的官能团位点（如NH2）
 """
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 import numpy as np
 from ase import Atoms
 from ase.neighborlist import NeighborList, natural_cutoffs
@@ -22,7 +22,8 @@ class SiteFinder:
         self,
         atoms: Atoms,
         site_type: str = None,
-        mult_factor: float = None
+        mult_factor: float = None,
+        original_indices_map: Dict[int, int] = None
     ) -> Dict[str, Any]:
         """
         识别官能团位点
@@ -31,6 +32,7 @@ class SiteFinder:
             atoms: ASE Atoms对象
             site_type: 位点类型（NH2, OH等）
             mult_factor: 键长判断因子
+            original_indices_map: 原始索引映射（新索引 -> 原始索引）
         
         Returns:
             位点识别结果
@@ -47,7 +49,7 @@ class SiteFinder:
         
         try:
             if site_type.upper() == "NH2":
-                return self._find_nh2_sites(atoms, mult_factor)
+                return self._find_nh2_sites(atoms, mult_factor, original_indices_map)
             else:
                 error_msg = f"不支持的位点类型: {site_type}"
                 self.logger.error(error_msg)
@@ -60,7 +62,12 @@ class SiteFinder:
             self.logger.error(error_msg)
             raise SiteFinderError(error_msg, details=str(e))
     
-    def _find_nh2_sites(self, atoms: Atoms, mult_factor: float) -> Dict[str, Any]:
+    def _find_nh2_sites(
+        self, 
+        atoms: Atoms, 
+        mult_factor: float,
+        original_indices_map: Optional[Dict[int, int]] = None
+    ) -> Dict[str, Any]:
         """识别NH2位点"""
         symbols = np.array(atoms.get_chemical_symbols(), dtype=str)
         scaled_pos = atoms.get_scaled_positions()
@@ -107,18 +114,24 @@ class SiteFinder:
             
             # NH2判据：至少1个C-N键，无N-金属配位
             if len(C_bonded) >= 1 and len(metal_bonded) == 0:
+                # 使用原始索引（如果提供了映射）
+                original_index = original_indices_map[i] if original_indices_map else i
+                original_C_bonded = [original_indices_map[j] if original_indices_map else j for j in C_bonded]
+                original_H_bonded = [original_indices_map[j] if original_indices_map else j for j in H_bonded]
+                
                 site_info = {
-                    "index": int(i),
+                    "index": int(original_index),  # 使用原始索引
+                    "framework_index": int(i),  # 去溶剂后的索引（供参考）
                     "element": "N",
                     "fractional": [round(x, 6) for x in scaled_pos[i].tolist()],
                     "cartesian": [round(x, 6) for x in cart_pos[i].tolist()],
-                    "bonded_C": [int(x) for x in C_bonded],
-                    "bonded_H": [int(x) for x in H_bonded]
+                    "bonded_C": [int(x) for x in original_C_bonded],
+                    "bonded_H": [int(x) for x in original_H_bonded]
                 }
                 nh2_sites.append(site_info)
                 
                 self.logger.info(
-                    f"位点 {len(nh2_sites)-1}: N[{i}] 分数坐标={site_info['fractional']}, "
+                    f"位点 {len(nh2_sites)-1}: N[原始:{original_index}] 分数坐标={site_info['fractional']}, "
                     f"C邻居={len(C_bonded)}, H邻居={len(H_bonded)}"
                 )
         

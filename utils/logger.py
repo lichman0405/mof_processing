@@ -112,3 +112,19 @@ class JobLogger:
     def get_logs(self) -> list:
         """获取所有收集的日志"""
         return self.logs.copy()
+    
+    def get_recent_logs(self, since_index: int = 0) -> list:
+        """
+        获取从指定索引开始的日志
+        
+        Args:
+            since_index: 起始索引
+        
+        Returns:
+            日志列表
+        """
+        return self.logs[since_index:].copy()
+    
+    def get_log_count(self) -> int:
+        """获取当前日志总数"""
+        return len(self.logs)

@@ -124,6 +124,9 @@ class Desolvator:
             framework_indices = sorted(framework_indices)
             guest_indices = sorted(set(range(n)) - set(framework_indices))
             
+            # 创建索引映射：新索引 -> 原始索引
+            framework_indices_map = {new_idx: old_idx for new_idx, old_idx in enumerate(framework_indices)}
+            
             # 统计信息
             framework_composition = Counter(symbols[framework_indices])
             guest_composition = Counter(symbols[guest_indices])
@@ -151,6 +154,7 @@ class Desolvator:
                 "framework_composition": dict(framework_composition),
                 "guest_composition": dict(guest_composition) if guest_indices else {},
                 "framework_object": framework,  # 传递给下一步
+                "framework_indices_map": framework_indices_map,  # 索引映射
                 "output_path": output_path,
                 "logs": self.logger.get_logs()
             }

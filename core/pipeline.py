@@ -29,6 +29,7 @@ class MOFPipeline:
         """
         self.job_id = job_id or str(uuid.uuid4())
         self.logger = JobLogger(self.job_id)
+        self.log_markers = {}  # 记录每个步骤开始时的日志位置
         
         # 初始化各个处理模块
         self.analyzer = StructureAnalyzer(self.logger)
@@ -83,20 +84,28 @@ class MOFPipeline:
         try:
             # ============ 步骤1: 检查结构 ============
             self.logger.info("\n[步骤1/4] 检查结构...")
+            log_start = self.logger.get_log_count()
+            
             step1_result = self.analyzer.analyze(cif_path)
-            result["data"]["steps"]["step1_check"] = self._format_step_result(step1_result)
+            result["data"]["steps"]["step1_check"] = self._format_step_result(
+                step1_result, log_start
+            )
             
             atoms = step1_result["atoms_object"]
             
             # ============ 步骤2: 去溶剂 ============
             self.logger.info("\n[步骤2/4] 去除溶剂...")
+            log_start = self.logger.get_log_count()
+            
             desolvated_path = self._get_temp_path("desolvated.cif")
             step2_result = self.desolvator.desolvate(
                 atoms=atoms,
                 output_path=desolvated_path,
                 mult_factor=mult_factor
             )
-            result["data"]["steps"]["step2_desolvate"] = self._format_step_result(step2_result)
+            result["data"]["steps"]["step2_desolvate"] = self._format_step_result(
+                step2_result, log_start
+            )
             
             # 保存去溶剂文件到输出目录
             if output_dir:
@@ -111,25 +120,35 @@ class MOFPipeline:
                 }
             
             framework = step2_result["framework_object"]
+            framework_indices_map = step2_result.get("framework_indices_map", None)
             
             # ============ 步骤3: 识别位点 ============
             self.logger.info("\n[步骤3/4] 识别NH2位点...")
+            log_start = self.logger.get_log_count()
+            
             step3_result = self.site_finder.find_sites(
                 atoms=framework,
                 site_type=site_type,
-                mult_factor=mult_factor
+                mult_factor=mult_factor,
+                original_indices_map=framework_indices_map  # 传递索引映射
             )
-            result["data"]["steps"]["step3_find_sites"] = self._format_step_result(step3_result)
+            result["data"]["steps"]["step3_find_sites"] = self._format_step_result(
+                step3_result, log_start
+            )
             
             # ============ 步骤4: 构建超胞 ============
             self.logger.info("\n[步骤4/4] 构建超胞...")
+            log_start = self.logger.get_log_count()
+            
             supercell_path = self._get_temp_path("supercell.cif")
             step4_result = self.supercell_builder.build_supercell(
                 atoms=framework,
                 output_path=supercell_path,
                 repeat=supercell_repeat
             )
-            result["data"]["steps"]["step4_supercell"] = self._format_step_result(step4_result)
+            result["data"]["steps"]["step4_supercell"] = self._format_step_result(
+                step4_result, log_start
+            )
             
             # 保存超胞文件到输出目录
             if output_dir:
@@ -187,12 +206,13 @@ class MOFPipeline:
             
             return result
     
-    def _format_step_result(self, step_result: Dict[str, Any]) -> Dict[str, Any]:
+    def _format_step_result(self, step_result: Dict[str, Any], log_start: int = 0) -> Dict[str, Any]:
         """
         格式化步骤结果，移除内部对象
         
         Args:
             step_result: 步骤原始结果
+            log_start: 该步骤开始时的日志索引
         
         Returns:
             格式化后的结果
@@ -202,6 +222,10 @@ class MOFPipeline:
         formatted.pop("atoms_object", None)
         formatted.pop("framework_object", None)
         formatted.pop("output_path", None)
+        formatted.pop("framework_indices_map", None)
+        
+        # 只保留该步骤的日志
+        formatted["logs"] = self.logger.get_recent_logs(log_start)
         
         return formatted
     
