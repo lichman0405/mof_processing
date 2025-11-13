@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  mof-api:
+    build: .
+    container_name: mof-processing-api
+    ports:
+      - "8000:8000"
+    volumes:
+      # 持久化存储
+      - ./uploads:/app/uploads
+      - ./outputs:/app/outputs
+      - ./logs:/app/logs
+    environment:
+      - LOG_LEVEL=INFO
+      - FILE_RETENTION_HOURS=24
+    restart: unless-stopped
+    networks:
+      - mof-network
+
+networks:
+  mof-network:
+    driver: bridge
